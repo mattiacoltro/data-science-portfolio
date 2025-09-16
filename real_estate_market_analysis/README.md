@@ -1,5 +1,8 @@
 # Texas Real Estate Market Analysis
 
+## My Rpubs profile
+The project is on my [Rpubs profile](http://rpubs.com/mattia11coltro/)
+
 ## Tools & Technologies
 - **R** (base functions, dplyr, ggplot2)  
 - **Statistical methods** for descriptive and inferential analysis  
@@ -38,8 +41,6 @@ The dataset contains the following variables:
 - **median_price**: median sales price (in dollars)  
 - **listings**: total number of active listings  
 - **months_inventory**: time needed to sell all current listings (in months)  
-
-👉 [Download the dataset](#)  
 
 ---
 
