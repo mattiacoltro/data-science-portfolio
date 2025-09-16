@@ -17,7 +17,7 @@ The company has noticed that the current structure of the spreadsheet used for c
 ## Request
 To implement the project, you will need to modify the attached spreadsheet so that it has the following structure:
 
-1. First tab or sheet
+### 1. First tab or sheet
 
 Name: “Consumer complaints”
 
@@ -33,7 +33,7 @@ Content:
 - There is a filter on the Date received column, which allows only rows with a date prior to August 8, 2016, to be displayed.
 
 
-2. Second tab or sheet
+### 2. Second tab or sheet
    
 Name: “Geographical insights”
 
@@ -50,7 +50,7 @@ Content:
 - Column B shows the number of complaints in the main tab broken down by state. (Hint: use the COUNTIF function).
 - Column C shows the percentage (rounded to the nearest whole number) of complaints in the main tab broken down by state. The cell is green if the percentage is less than 2%, red otherwise. (Hint: conditional formatting).
 
-3. Third tab or sheet
+### 3. Third tab or sheet
 
 Name: “Statistical insights”
 
