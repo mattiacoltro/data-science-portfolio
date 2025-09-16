@@ -52,6 +52,9 @@ The project involves the implementation of the following features:
     The third function creates a dictionary with the names of the teams/constructors as keys and their total scores as values. Each team's score is the sum of the points obtained by the drivers who competed for that constructor.
     This function uses the data previously generated for the drivers and calculates the constructors' standings. This information is also essential for gaining a clear picture of the teams' performance throughout the year.
 
+## Project structure
+1. Analysis with only functions
+2. Modeling with classes and analysis
 
 ## Technologies
 Python 
