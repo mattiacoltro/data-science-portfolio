@@ -1,5 +1,17 @@
 # Use Case: Data-Driven Optimization for Superstore in Europe
 
+## Technology 
+Excel
+
+Tableau
+
+##  My Tableau Public
+The project is public on my [Tableau page](https://public.tableau.com/app/profile/mattia.coltro/viz/Analisivenditeperunagrossacatenadisupermercati_17049835084950/StoryInsight) 
+
+## Dataset
+[Download the dataset](https://docs.google.com/spreadsheets/d/1bajeG0Iw_5ueShfAK6tqBLYR8ZzK7KcDRD7m7d7Vkgo/edit?usp=sharing)  
+
+
 ## Project Description
 Superstore, one of the most innovative companies in the European market, has decided to transform its decision-making process by adopting a **data-driven approach**.  
 To maintain its leadership, the company aims to build a system for **continuous monitoring of its European operations** and implement a **targeted marketing strategy** focused on products with the highest growth potential.  
@@ -54,18 +66,3 @@ Superstore is open to further insights for improving performance. By exploring t
 ## Conclusion
 With a set of **dynamic dashboards** and a **well-structured Tableau Story**, Superstore will be able to monitor its European operations and make more effective marketing decisions.  
 This solution will allow the company to **improve efficiency, reduce costs, and increase profits**, ensuring continued success in a highly competitive market.  
-
----
-
-## Dataset
-[Download the dataset](https://docs.google.com/spreadsheets/d/1bajeG0Iw_5ueShfAK6tqBLYR8ZzK7KcDRD7m7d7Vkgo/edit?usp=sharing)  
-
----
-
-##  My Tableau Public
-The project is public on my [Tableau page](https://public.tableau.com/app/profile/mattia.coltro/viz/Analisivenditeperunagrossacatenadisupermercati_17049835084950/StoryInsight) 
-
-## Technology 
-Excel
-
-Tableau
