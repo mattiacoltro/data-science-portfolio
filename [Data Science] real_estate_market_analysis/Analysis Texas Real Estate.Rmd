@@ -1,0 +1,429 @@
+---
+title: "Analysis Texas Real Estate"
+author: "Mattia Coltro"
+date: "2024-10-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+# library
+library(dplyr)
+library(ggplot2)
+library(gghalves)
+library(moments)
+library(rlang) 
+```
+## Overview
+
+- Upload the dataset
+- Show an overview of the data
+
+```{r}
+url_dataset <- "https://raw.githubusercontent.com/ProfAI/statistica-descrittiva-per-datascience/refs/heads/main/progetto%20finale/Real%20Estate%20Texas.csv"
+data <- read.csv(url_dataset) 
+head(data,10)
+```
+## 1. Variables analysis
+
+All the variables are quantitative except "city" that is a categorical nominal variable with the following values:
+
+```{r}
+unique(data$city)
+```
+
+```{r}
+summary(data[-1])
+```
+
+The two variables "year" and "month" (encoded with numbers from 1 to 12) are relative to time and will help to analyze the other ones along the 5 year time line (from 2010 to 2014) in the dataset.
+
+The variables worth investigating are:
+
+```{r}
+features <- colnames(data)
+investigate_var <- features[4:length(features)]
+investigate_var
+```
+## 2. Measures of central tendency, variability and shape
+
+```{r}
+#coefficient of variation
+CV <- function(x){return(sd(x)/mean(x)*100)}
+
+# report of the mesures 
+report.text <- function(x){
+  text <- paste0(
+    "Variability indices",
+    "\nIQR: ", round(IQR(x),2),
+    "\nVariance: ", round(var(x),2),
+    "\nSt.Dev: ", round(sd(x),2),
+    "\nCoeff.Var: ", round(CV(x),2),
+    "\n\nShape indices",
+    "\nSkewness: ", round(skewness(x),2),
+    "\nKurtosis: ", round(kurtosis(x)-3,2)
+  )
+  return(text)
+}
+
+# boxplot and distribution in half violin structure
+half.box.violin <- function(dataset, feature, W_report=T){
+    col_var <- dataset[[feature]]
+    mean_value = mean(col_var)
+    
+    g_plt <- ggplot(dataset, aes(x=0, y=col_var))+
+            geom_half_boxplot(aes(y=col_var),
+                              side = "l",
+                              fill = "pink")+
+            geom_half_violin(aes(y=col_var),
+                             side = "r",
+                             fill = "lightblue")+
+            scale_x_continuous(limits = c(-1, 1)) +
+      
+            # Mean
+            annotate("segment",x = -0.375,xend = 1, y = mean_value, yend = mean_value,  
+                         color = "red", linewidth = 1) +
+            
+            stat_summary(fun = mean, geom = "text",
+                         aes(label = paste("Mean:", round(after_stat(y), 2))),
+                         hjust = 1,vjust = -0.5, color = "red",
+                         position = position_nudge(x = 1))+
+      
+            # Quartiles
+            stat_summary(fun.data = function(x) {
+                  r <- quantile(x, probs = c(0, 0.25, 0.5, 0.75, 1))
+                  data.frame(y = r,
+                    label = c(paste("Min:", round(r[1], 2)),
+                              paste("Q1:", round(r[2], 2)),
+                              paste("Median:", round(r[3], 2)),
+                              paste("Q3:", round(r[4], 2)),
+                              paste("Max:", round(r[5], 2)))
+                  )}, 
+                geom = "text",
+                position = position_nudge(x = -0.02),
+                hjust = 1, vjust = -0.5, color = "blue")+
+          #Labels
+          labs(title = paste0("Boxplot and density distribution of ", feature), y = paste0(feature, " value"))+
+          theme(axis.text.x = element_blank(),
+                axis.ticks.x = element_blank(),
+                axis.title.x = element_blank())
+          
+          # Text square
+          if (W_report){
+            text = report.text(col_var)
+            g_plt <- g_plt+
+              annotate("label", x =-1,y = max(col_var),
+                       label = text,
+                       parse = F,
+                       color = "blue",fill = "white", size = 4, hjust = 0, vjust = 1)
+
+          }
+    return(g_plt)
+}
+
+```
+
+
+```{r}
+for (var_ in investigate_var) {
+  plot <-half.box.violin(data, var_)
+    print(plot)
+}
+```
+
+
+### Sales
+The density distribution is shifted towards low values of sales as the skewness shows with a value close to 1 (right-skewed).
+The values are not normally distributed, with a long tail towards the highest values and so it's showed by the value of mean that is greater than median and mode.
+
+### Volume
+The characteristics of this distribution are very similar to the sales one. We have a right-skewed distribution with a value of skewness again close to 1, mean higher than median and mode and the most of values (more than 75%) are in the lower part of the scale. 
+
+### Median price
+The values are shifted to the higher ones (negative skewness) but not in an extreme way. Mean, median and mode are close to each other and the IQR is almost in the middle of the distribution. There is a tail towards the low values but this distribution is enough normal-like.
+
+
+### Listings
+This distribution shows 3 modes (2 in the low vales and 1 in high values). It presents a positive skewness with a relative high value (even if median and mean are close) and with the highest concentration of values in the lower part.
+
+### Months inventory
+This distribution has high simmetry (skewness around 0), median and mean are very similar but the mode is a little bit bigger. The IQR is positioned around the middle of the scale. Months inventory distribution is very close to the normal one.
+
+
+
+## 3. Identification of the variables with the most variability and skewness
+
+To identify the variable with the most variability we must look at the Coefficient of Variation, because all the variables have different units of measurement we can't compare the standard deviations (measures the data dispersion from the mean) being on different scales. As the CV is dimensionless (explains the variability relatively to the mean) allows us to compare variables from different scales.
+
+The variable with the highest CV = 53.71 is *volume*.
+
+
+About the most skewed distribution we must look at the homonymous measure (skewness) that explain the symmetry of the variables distribution and it's related to the normal distribution shape (range between -1 and 1, 0 if is exactly normal) so the comparison is possible even between variables with different measurement units.
+
+The most skewed variable with skewness = 0.88 is *volume*.
+
+*Volume* and *sales* have similar distributions indeed also for sales the CV and skewness are very high (41.42, 0.72) and close to the previous values of volume variable.
+These two variables have shown the same behavior (right skewed shape or positive skewness). There is a big concentration of the data around the mode that is very close to the first quartile and the most of the data (about 75%) are located in the first half (lower part, or lower values) of their respective ranges (for sales the 3rd quartile is under the half and just over for volume). The long right tail (toward the higher values) and the large dispersion of the data in that direction confirmed the high values of CV.
+
+
+
+## 4. Creation of classes for a quantitative variable
+
+```{r}
+# create class frequencies distribution from a numerical vector, and plot if wanted
+class.freq.distr <- function(vector, n=10, plot=T, title = ""){
+  x <- vector
+  class <- cut(x, breaks = n, include.lowest = TRUE)
+  class_freq <- table(class)
+  if (plot) {
+    barplot(class_freq, main = title, ylab = "frequencies", xlab = "intervals")
+  }
+  return(class_freq)
+}
+
+#calculate gini index
+gini.index<- function(x){             
+		  ni=table(x)
+		  fi=ni/length(x)
+		  fi2=fi^2
+		  J=length(table(x))
+		  
+		  gini= 1-sum(fi2)
+		  gini.norm = gini/((J-1)/J)
+		  
+		  return(gini.norm)
+}
+```
+
+
+```{r}
+title <- "Median price distribution in K"
+intervals <- 10
+freq <- class.freq.distr(data$median_price/1000, n = intervals, plot = T, title = title )
+
+```
+```{r}
+for (i in c(10,20,50,100,150)){
+  freq <- class.freq.distr(data$median_price/1000, n=i, plot=F)
+  text <- paste0("Classes= ", i, ", Gini index= ", gini.index(freq))
+  print(text)
+}
+```
+
+The bar chart shows the distribution of the *median_price* variable divided in 10 intervals. According with the Gini's index measurements the distribution is very far from the uniform distribution. Indeed the Gini's index measures the heterogeneity of a distribution, but is mostly used with qualitative variables. In this case if we increase the number of intervals the index becomes to decrease because some intervals will have the same frequency and it falls in a less heterogeneity, even if little. Obviously when the intervals became so narrows to represent every single data point the index increases again. However the Gini's index is very close to 1 (maximum heterogeneity, while 0 is maximum homogeneity) so we can assert that there's not homogeneous distribution of *median_price* values.
+
+
+## 5. Probability calculation
+
+Taken a random row from the dataset what is the probability to:
+
+```{r}
+prob_1 <- sum(data$city == "Beaumont")/nrow(data)
+print(paste("Find as city Beaumont:", round(prob_1*100,2), "%"))
+
+prob_2 <- sum(data$month == 7)/nrow(data)
+print(paste("Find the month of July:", round(prob_2*100,2), "%"))
+
+prob_3 <- sum(data$month == 12 & data$year==2012)/nrow(data)
+print(paste("Find december 2012:", round(prob_3*100,2), "%"))
+
+```
+## 6. Creation of new variables
+
+Create a variable that calculates the average price with the available variables 
+```{r}
+data$average_price <- (data$volume/data$sales)*10^6
+```
+The *average_price* is calculated as the mean value of a sale in a determined month. The measure is given in million dollars to be easily compared with the *median_price*.
+
+
+Create a column that measures the effectiveness of sales advertisements
+```{r}
+data$listings_eff <-data$sales/data$listings
+
+agg_mean_eff_listing <- data %>%
+                          group_by(city) %>%
+                          summarise(mean_listings_eff = mean(listings_eff))
+agg_mean_eff_listing
+```
+
+The listings effectiveness is calculated as the part of the active advertisements sold in that month.
+On average the city with the highest listing effectiveness is Bryan-College Station (14.73%), while the one with the lowest value is Tyler (9.34%).
+
+
+## 7. Conditional anlalysis
+
+```{r}
+create.summary <- function(dataset, grouping, features, list_eff=F){
+  summary <- dataset %>%
+              group_by({{grouping}}) %>%
+              summarise(
+                across(all_of(features),
+                      list(mean=mean, sd=sd),
+                      .names = "{.col}_{.fn}"))
+  if (list_eff){
+     summary$listings_eff <-summary$sales_mean/summary$listings_mean
+  }
+ 
+
+  return(summary)
+}
+features <- c("sales", "volume", "listings", "median_price", "average_price")
+city.report <- create.summary(data, city, features)
+year.report <- create.summary(data, year, features, list_eff=T)
+month.report <- create.summary(data, month, features)
+city.report
+year.report
+month.report
+```
+The analysis by city shows that Tyler has the largest market leading the mean in sales, volume and listings with a limited variability, while Bryan-College Station presents the highest standard deviations in those metrics. According to this Bryan-College Station has the highest mean prices(median and average) that could explain an higher volatility of the previous (sales, volume, listings) values.
+
+In the years we can see an increasing trend in sales and volume means and std. dev. with a decreasing trend of listings. The prices are stable (slight increase) with a peak in volatility in the 2014. This shows an improvement in listing efficiency as reported in the *list_eff* variable as the years go by .
+
+About the monthly trend is clear that during the summer months all the mean metrics are higher (especially in may, june, july and august), and tend to decrease with the winter. For the variability the std. dev. of sales, volume and listings follow the means trend but for the prices (median and average) the variability reach the highest values in the winter months.
+
+Comparing the *average_price* and the *median_price* in all three report (by city, by month, by year) we observe that the first is always higher. This fact means there are some volume values very high compared with the most values of the distribution, so few very expensive sales push up the average sales price while the most of sales are of lower values reporting a lower median price.
+
+
+## 8. Creation and visualization with ggplot2
+
+```{r}
+#create a time series line chart
+time_series <- function(dataset, var){
+  
+  var_str <- as_name(enquo(var))
+  ts_df <- dataset
+  ts_df$year <- as.numeric(ts_df$year)
+  ts_df$date <- as.Date(paste(ts_df$year, ts_df$month, "01", sep = "-"))
+  ts_report <- ts_df %>%
+    arrange(date)
+
+  plot <-ggplot(ts_report, aes(x = date, y = {{var}}, color = city)) +
+    geom_line(linewidth=0.9) +
+    labs(title = paste("Trend of", var_str, "over time"), x = "Time", y = paste(var_str, "values"))+
+    scale_fill_brewer(palette = "Set1")+
+    scale_x_date(
+    breaks = seq(as.Date("2010-01-01"), as.Date("2014-01-01"), by = "1 year"), date_labels = "%Y") +
+    theme_classic()+
+    theme(
+    panel.grid.major = element_line(color = "gray80", size = 0.5),  
+    panel.grid.minor = element_line(color = "gray90", size = 0.25), 
+    )
+
+  print(plot)
+
+  return(ts_report)
+}
+
+
+# create a boxplot grouped by city and different years
+boxplot.by.city <- function(dataset, y_var, grouping_var= city, years=F){
+    y_lab <- as_name(enquo(y_var))
+    grouping_lab <- as_name(enquo(grouping_var))
+    y_min <- min(dataset %>% pull({{ y_var }}), na.rm = TRUE)
+    y_max <- max(dataset %>% pull({{ y_var }}), na.rm = TRUE)
+    y_range <- y_max - y_min
+    y_breaks <- seq(y_min, y_max, by = y_range / 10)
+    title_text <- paste(y_lab, "distribution by", grouping_lab)
+
+    plot <- ggplot(data = dataset, aes(x={{grouping_var}}, y={{y_var}},
+                                       fill=factor({{grouping_var}})))+
+              geom_boxplot()+
+              scale_y_continuous(breaks = y_breaks, limits = c(y_min, y_max)) +
+              scale_fill_brewer(palette = "Set1")+
+              labs(title = title_text,
+                   y=paste(y_lab, "values"),
+                   fill = as_name(enquo(grouping_var)))
+              
+      if (years) {
+            plot <- plot + 
+                    aes(fill = factor(year))+
+                    scale_fill_discrete(name="Year")+
+                    labs(title = paste(title_text, "and year"))
+      }
+    print(plot)
+}
+
+# create stack barchart divided by month, normalized or subdivision by year
+stack.barchart.monthly <- function(data, var, year=F, norm= F){
+    agg_data <- data %>%
+      group_by(year, month, city) %>%
+      summarise(total_sales = sum({{var}}), .groups = "drop")%>%
+      group_by(month) %>%
+      mutate(proportion = total_sales / sum(total_sales)) 
+    text_title <- paste("Monthly distribution of", as_name(enquo(var)), "by city")
+    p <- ggplot(agg_data, aes(x = factor(month), 
+                           y = total_sales, 
+                           fill = city)) +
+            geom_bar(stat = "identity") +
+            labs(title = text_title,
+                 x = "Month",
+                 y = paste("Sum of", as_name(enquo(var))),
+                 fill = "City") +
+            theme_minimal() +
+            theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+            scale_fill_brewer(palette = "Set2")
+  if (norm){
+    p <- ggplot(agg_data, aes(x = factor(month), 
+                     y = proportion, 
+                     fill = city)) +
+            geom_bar(stat = "identity", position = "stack") +
+            scale_y_continuous(labels = scales::percent) +  
+            labs(title = paste("Normalized", text_title),
+                 x = "Month",
+                 y = "Proportion (%)",
+                 fill = "City") +
+            theme_minimal()
+  }
+  if (year){
+    p <- p +
+      facet_wrap(~ year, ncol = 1)  
+  }
+    print(p)
+}
+```
+
+```{r}
+boxplot.by.city(data, median_price)
+boxplot.by.city(data, volume)
+boxplot.by.city(data, volume, grouping_var=year)
+boxplot.by.city(data, volume, years = T)
+```
+
+
+The *median_price* distribution divided by city shows that in Bryan-College Station there is an higher level of pricing and for Wichita Falls the price level is very far from the other cities. For the variability (in this case IQ range) is almost the same in the 4 cities (a little larger in Wichita Falls). In the boxplot we see 3 positive outliers that could shift up the mean of the distribution in those cities.
+
+Analyzing the other boxplots about the *volume* we can observe that Tyler has the highest median and Bryan-College station the wider IQR. A smaller IQR may indicate higher concentration of the values around the median i.e. less variation. In 3 on 4 cities it was found an increasing trend, just in Wichita Falls we see a flat trend of the volume with lower values than the others. The city with the most stable distribution in the growing market is Tyler with an almost symmetric distribution of the values in the years, this might suggest a more robust and reliable market in that area. In Bryan-College Station boxplot along the years shows almost every year the median value tends towards the bottom of the distribution meaning that the distribution range is spread by some expensive sales while the most are of lower prices. According with the statement of the growing market the boxplot of volumes by year shows an increase in the median value and the IQR too, pointing out an bigger variability in volumes with their increase.
+
+
+```{r}
+stack.barchart.monthly(data, sales)
+stack.barchart.monthly(data, sales, year = T)
+stack.barchart.monthly(data, sales, norm = T)
+stack.barchart.monthly(data, volume)
+stack.barchart.monthly(data, volume, year = T)
+```
+
+
+The monthly stack barcharts shows what previously written of the trend along the months. Both for *sales* and *volume* the best months are may, june, july and august. The good performances in these months are to be blamed mostly to Tyler and Bryan-College Station, they brought the most of sales in percentage as the normalized barchart explicits. Regarding the monthly trend over the years there is a little shift in the peaks from april, may in 2010 to june, july in 2014.
+
+
+
+```{r}
+volume.ts <- time_series(data, var = volume)
+sales.ts <- time_series(data, var = sales)
+average_p.ts <- time_series(data, var = average_price)
+media_p.ts <- time_series(data, var=median_price)
+```
+
+
+The time series of the variables visualized allows to confirm all the analysis done previously. *Volume* and *sales* follow cycles along the months with an increasing trend (except Wichita Falls that seems more flat compared to the others). In these metrics Wichita Falls is the worst at the bottom of the charts while Tyler and Bryan-College Station have the best performances. 
+In the prices (median, average) the best is Bryan-College Station followed by Tyler, Beaumont and then Wichita Falls. Along the years the prices trend is almost flat (with month cycles) showing 4 price levels one for each city, only in the last 2 years we can recognize an increasing trend in Bryan-College Station prices.
+
+
+
+## Conclusions
+The real estate market in Tyler and Bryan-College Station is bigger than in the other 2 cities, and Bryan-College Station as the most efficient in listings. 
+We might infer that in Tyler and Bryan-College Station the buildings are better priced than the ones in Beaumont and Wichita Falls. This deduction should be confirmed by going to look for the causes that could be architectural, environmental or social, but for this we need more data.
