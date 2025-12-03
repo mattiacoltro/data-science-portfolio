@@ -1,0 +1,692 @@
+---
+title: "Statistic Model to Predict the Newborns Weight"
+author: "Mattia Coltro"
+date: "2024-12-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# library
+library(ggplot2)
+library(gghalves)
+library(moments)
+library(dplyr)
+library(car)
+library(lmtest)
+```
+
+## Overview
+
+- Download the dataset <https://drive.google.com/file/d/1ChfwftuOSH-WLIto_1AvV-_sQIksGeTq/view>
+- Upload the file 
+- Show an overview of the data
+
+```{r}
+file <- "neonati.csv"
+dati <- read.csv(file)
+
+summary(dati)
+print(paste("Number of record:", nrow(dati)))
+birth.type <- unique(dati$Tipo.parto)
+hospital <- unique(dati$Ospedale)
+sex <- unique(dati$Sesso)
+
+table(dati$Tipo.parto)
+table(dati$Ospedale)
+table(dati$Sesso)
+table(dati$Fumatrici)
+
+
+
+```
+
+## 1. Data collecion and dataset structure
+
+The dataset contains 2500 record about infants coming from 3 different hospitals.
+The variables in the dataset are:
+
+  - **Anni.madre** : quantitative variable (continuous), time measurement of the mother's age in years.
+  - **N.gravidanze** : quantitative variable (continuous), number of pregnancies the mother had.
+  - **Fumatrici** : nominal categorical variable (dummy), expresses if the mother is a smoker (1) or not (0).
+  - **Gestazione** : quantitative variable (continuous), time measurement about the weeks number of pregnancy.
+  - **Peso** : quantitative variable (continuous), weight of the infant at birth in grams.
+  - **Lunghezza** : quantitative variable (continuous),length of the infant in mm (possible measurement even during pregnancy through echography).
+  - **Cranio** : quantitative variable (continuous), infant's cranial circumference in mm (possible measurement even during pregnancy through echography).
+  - **Tipo.parto** : nominal categorical variable (possible dummy), assumes 2 values *Nat* for natural birth and *Ces* for a cesarean birth.
+  - **Ospedale** : nominal categorical variable, assumes 3 values based on where the infant was born (osp1, osp2, osp3).
+  - **Sesso** : nominal categorical variable (possible dummy), expresses the sex of the infant.
+
+Observing the count of records by hospital and sex the dataset is balanced, while in type of birth the natural birth has a much higher value compared to the cesarean one, even for the smokers the values are more shifted on the no smoker mothers.
+
+
+## 2. Analysis and modeling
+
+### Exploratory analysis
+
+Distribution analysis of the variables
+
+```{r}
+#coefficient of variation
+CV <- function(x){return(sd(x)/mean(x)*100)}
+
+# report of the mesures 
+report.text <- function(x){
+  text <- paste0(
+    "Variability indices",
+    "\nIQR: ", round(IQR(x),2),
+    "\nVariance: ", round(var(x),2),
+    "\nSt.Dev: ", round(sd(x),2),
+    "\nCoeff.Var: ", round(CV(x),2),
+    "\n\nShape indices",
+    "\nSkewness: ", round(skewness(x),2),
+    "\nKurtosis: ", round(kurtosis(x)-3,2)
+  )
+  return(text)
+}
+
+# boxplot and distribution in half violin structure
+half.box.violin <- function(dataset, feature, W_report=T){
+    col_var <- dataset[[feature]]
+    mean_value = mean(col_var)
+    
+    g_plt <- ggplot(dataset, aes(x=0, y=col_var))+
+            geom_half_boxplot(aes(y=col_var),
+                              side = "l",
+                              fill = "pink")+
+            geom_half_violin(aes(y=col_var),
+                             side = "r",
+                             fill = "lightblue")+
+            scale_x_continuous(limits = c(-1, 1)) +
+      
+            # Mean
+            annotate("segment",x = -0.375,xend = 1, y = mean_value, yend = mean_value,  
+                         color = "red", linewidth = 1) +
+            
+            stat_summary(fun = mean, geom = "text",
+                         aes(label = paste("Mean:", round(after_stat(y), 2))),
+                         hjust = 1,vjust = -0.5, color = "red",
+                         position = position_nudge(x = 1))+
+      
+            # Quartiles
+            stat_summary(fun.data = function(x) {
+                  r <- quantile(x, probs = c(0, 0.25, 0.5, 0.75, 1))
+                  data.frame(y = r,
+                    label = c(paste("Min:", round(r[1], 2)),
+                              paste("Q1:", round(r[2], 2)),
+                              paste("Median:", round(r[3], 2)),
+                              paste("Q3:", round(r[4], 2)),
+                              paste("Max:", round(r[5], 2)))
+                  )}, 
+                geom = "text",
+                position = position_nudge(x = -0.02),
+                hjust = 1, vjust = -0.5, color = "blue")+
+          #Labels
+          labs(title = paste0("Boxplot and density distribution of ", feature), y = paste0(feature, " value"))+
+          theme(axis.text.x = element_blank(),
+                axis.ticks.x = element_blank(),
+                axis.title.x = element_blank())
+          
+          # Text square
+          if (W_report){
+            text = report.text(col_var)
+            g_plt <- g_plt+
+              annotate("label", x =-1,y = max(col_var),
+                       label = text,
+                       parse = F,
+                       color = "blue",fill = "white", size = 4, hjust = 0, vjust = 1)
+
+          }
+    return(g_plt)
+}
+
+find.outlier <- function(array.val){
+  Q1 <- quantile(array.val, 0.25)
+  Q3 <- quantile(array.val, 0.75)
+  IQR <- Q3-Q1
+  upper_bound <- Q3 + 1.5*IQR
+  lower_bound <- Q1 - 1.5*IQR
+  outlier_indices <- which(array.val < lower_bound | array.val > upper_bound)
+  return(outlier_indices)
+}
+```
+
+```{r}
+distr.var <- colnames(dati)[1:(ncol(dati)-3)]
+distr.var <- setdiff(distr.var, "Fumatrici")
+
+for (var_ in distr.var) {
+  plot <-half.box.violin(dati, var_)
+    print(plot)
+}
+
+title = "Distribution of frequency"
+barplot(table(dati$N.gravidanze), ylab = "frequencies", xlab= "n. pregnancies", main = title)
+barplot(table(dati$Gestazione), ylab = "frequencies", xlab= "weeks of pregnancy", main = title)
+
+for (var_ in distr.var) {
+    arr <- dati[[var_]]  
+    outlier <- find.outlier(arr)
+    print(paste0("Outliers' counter in ", var_, ": ", length(outlier)))
+}
+```
+
+From the boxplots of the distributions we can see a lot of outliers (points out of the whiskers) for each variable, those values could influence the estimation of the regression coefficients in the following analysis.
+
+To understand better the variables distribution *N.Gravidanze* and *Gestazione* is clearer to use a frequency distribution plot. Those 2 variables are very skewed.
+The number of pregnancy is positively skewed meaning that the distribution is high concentrated in the low values (mostly on 0, 1, 2 around 75%). 
+The weeks of pregnancy are negatively skewed showing an higher concentration of values in the high values; 50% of the pregnancies occur between 38 and 40 weeks, almost all are between 35 and 42 weeks.
+
+*Anni.madre*, *Lunghezza*, *Cranio* seem to show a normal-like distribution.
+
+*Anni.madre* shows some values out of the domain so we check those outliers.
+
+```{r}
+outlier <- find.outlier(dati$Anni.madre)
+dati[outlier,]
+```
+
+The rows 1152 and 1380 have clearly data out of the domain (a mother can't have 0 or 1 year) so we are going to impute those values.
+
+```{r}
+shapiro.test(dati$Anni.madre)
+```
+
+The test shows the non-normality of the distribution so the best way to perform the imputation is to use the median value.
+
+```{r}
+dati$Anni.madre[dati$Anni.madre %in% c(0,1)] <- median(dati$Anni.madre, na.rm=TRUE)
+dati[c(1152,1380),]
+```
+
+**Peso** is the target variable and shows a Gaussian curve distribution with mean, median and mode very close, even the skewness is almost 0.
+
+The execution of some hypothesis testing will clarify this assumption.
+
+```{r}
+# shapiro test to check the normality of the target vairable
+shapiro.test(dati$Peso)
+```
+
+Contrary to what observed before we can't assume the distributions' normality of the variable *Peso* because the Shapiro-Wilk test shows a very low p-value making us reject the null hypothesis.
+
+With the help of others hypothesis testing we'll check if:
+
+1. In some hospitals are performed significantly more cesarean birth.
+```{r}
+contingency.table <- table(dati$Ospedale, dati$Tipo.parto)
+print("Contingency table")
+print(contingency.table)
+test.chi2 <- chisq.test(contingency.table)
+
+print(test.chi2)
+```
+
+Was run the chi-squared test to check the independence between the hospital and the type of birth. The result with a high p-value (0.58) leads us to conclude that we can't reject the null hypothesis of independence between the type of birth and the hospital where it is performed.
+
+So we can assert that there is no significant difference in the cesarean birth practice among the 3 hospitals.
+
+
+
+2. The average weight and length of this sample of infants are significantly equal to the population.
+
+To verify these hypothesis it's necessary to consider a target value for each average.
+
+Taking data from a well known research center that is [Bambino Gesù-Ospedale Pediatrico](https://www.ospedalebambinogesu.it/da-0-a-30-giorni-come-si-presenta-e-come-cresce-80012/#:~:text=In%20media%20il%20peso%20nascita,pari%20mediamente%20a%2050%20centimetri.) the average values are:
+Weight: 3300 g
+Length: 500 mm
+
+Going in a deeper research from the official WHO (World Health Organization) tables of [weight for age](https://www.who.int/tools/child-growth-standards/standards/weight-for-age) and [length for age](https://www.who.int/tools/child-growth-standards/standards/length-height-for-age) it was found that the data are provided only grouped by sex and not aggregated, so the hypothesis test can be also conducted for the 2 categories.
+
+The values of the mean weight of the population are:
+[Boys](https://cdn.who.int/media/docs/default-source/child-growth/child-growth-standards/indicators/weight-for-age/wfa-boys-0-13-zscores.pdf?sfvrsn=9522e0d2_11): 3346 grams
+[Girls](https://cdn.who.int/media/docs/default-source/child-growth/child-growth-standards/indicators/weight-for-age/wfa-girls-0-13-zscores.pdf?sfvrsn=22ebd578_11): 3232 grams
+
+The values of the mean length of the population are:
+[Boys](https://cdn.who.int/media/docs/default-source/child-growth/child-growth-standards/indicators/length-height-for-age/lfa_boys_0_13_zscores.pdf?sfvrsn=60332f92_9): 499 mm
+[Girls](https://cdn.who.int/media/docs/default-source/child-growth/child-growth-standards/indicators/length-height-for-age/lfa_girls_0_13_zscores.pdf?sfvrsn=61e6e884_16): 491 mm
+
+(N.B: the tables of WHO show the median values but we assume the normality of the distribution so median and mean are very close and we use those values as target for the population means)
+
+```{r}
+arr.male.weight <- dati$Peso[dati$Sesso =="M"]
+arr.female.weight <- dati$Peso[dati$Sesso =="F"]
+
+arr.male.length<- dati$Lunghezza[dati$Sesso =="M"]
+arr.female.length <- dati$Lunghezza[dati$Sesso =="F"]
+
+shapiro.test(arr.male.weight)
+shapiro.test(arr.female.weight)
+shapiro.test(arr.male.length)
+shapiro.test(arr.female.length)
+```
+
+Here was checked the normality assumption of the t test for the data of weight and length grouped by sex, and with very low p-values we must reject the null hypothesis, as for the arrays aggregated.
+Even without the normality assumption we can use the t test because the sample is big enough (n>>30) to exploit the Central Limit Theorem.
+
+```{r}
+# weight t test
+
+# no sex division
+t.test(dati$Peso, mu=3300, conf.level = 0.95, alternative = "two.sided")
+
+#sex division
+t.test(arr.male.weight, mu=3346, conf.level = 0.95, alternative = "two.sided")
+t.test(arr.female.weight, mu=3232, conf.level = 0.95, alternative = "two.sided")
+```
+
+
+With aggregated data the pvalue is 0.1296 > 0.05 so we can't reject the null hypothesis and conclude that the population and sample means are not significantly different.
+
+Consider to test the sex separated the results are the opposite, so the values for both male and female are very low and in this case we must reject the null hypothesis saying the means of population and samples are significantly different.
+
+```{r}
+# length t test
+
+# no sex division
+t.test(dati$Lunghezza, mu=500, conf.level = 0.95, alternative = "two.sided")
+
+# sex divison
+t.test(arr.male.length , mu=499, conf.level = 0.95, alternative = "two.sided")
+t.test(arr.female.length, mu=491, conf.level = 0.95, alternative = "two.sided")
+```
+
+
+Compared to the weight here there's the opposite situation. For the test with aggregated data the pvalue is very low so the means of population and sample are considered significantly different, while with the sex division we mustn't reject the null hypothesis because of the high pvalues (0.3278, 0112).
+
+From these results we can conclude that the most important thing is to understand which population consider (and the values associated), because the t test can produce very different results even with little changes in the target values.
+
+
+
+3. The anthropometric measures are significantly different among the 2 sex.
+
+For anthropometric measures we intend weight, length, and the head circumference.
+
+```{r}
+male <- subset(dati, Sesso == "M")  
+female <- subset(dati, Sesso == "F")
+
+shapiro.test(male$Cranio)
+shapiro.test(female$Cranio)
+
+plot(density(male$Peso))
+plot(density(female$Peso))
+plot(density(male$Lunghezza))
+plot(density(female$Lunghezza))
+plot(density(male$Cranio))
+plot(density(female$Cranio))
+```
+
+For the variables *Peso* and *Lunghezza*, we already know that aren't normally distributed. With the shapiro test for the *Cranio* variable we arrive at the same conclusion (pvalues very low, so we must reject the null hypothesis of normal distribution). The density distributions show a good symmetry with some outlier in the tails.
+
+For the same reason as before (n>>30) we use the Central Limit Theorem to be able to conduct the t test, but before we have to check the homogeneity of the variances. Without the assumption of normality we can't use directly the F test but we perform a Levene test that is robust to not normal distributions
+
+```{r}
+dati$Sesso <- as.factor(dati$Sesso)
+# default value of central tendency = median, more robust to outlier
+leveneTest(Peso ~ Sesso, data = dati)
+leveneTest(Lunghezza ~ Sesso, data = dati)
+leveneTest(Cranio ~ Sesso, data = dati)
+```
+
+Looking at the results of the variance analysis we can assume that for the variables *Peso* and *Cranio* the variance is the same for both sex while in *Lunghezza* we must reject the homogeneity variance hypothesis.
+
+```{r}
+t.test(Peso ~ Sesso, data = dati, var.equal = TRUE)  
+t.test(Lunghezza ~ Sesso, data = dati, var.equal = FALSE) 
+t.test(Cranio ~ Sesso, data = dati, var.equal = TRUE)
+
+# Mann-Whitney U test
+wilcox.test(Peso ~ Sesso, data = dati)
+wilcox.test(Lunghezza ~ Sesso, data = dati)
+wilcox.test(Cranio ~ Sesso, data = dati)
+```
+
+
+All the anthropometric measures (weight, length, head circumference) are significantly different (pvalues very low) between different sex (were performed even the non-parametric tests giving the same results).
+
+
+### Creation of the Regression Model
+
+First of all we are going to analyze the correlation between variables.
+
+```{r}
+df.num <- dati %>% select_if(is.numeric)
+
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...)
+{
+  par(usr = c(0, 1, 0, 1))
+  r <- abs(cor(x, y))
+  txt <- format(c(r, 0.123456789), digits = digits)[1]
+  txt <- paste0(prefix, txt)
+  if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+  text(0.5, 0.5, txt, cex = cex.cor * r)
+}
+
+pairs(df.num, upper.panel = panel.smooth, lower.panel = panel.cor)
+```
+
+Above is shown a matrix where on the diagonal there are the numeric variables, under that there are the values of Pearson correlation between each variable and above the diagonal are printed the scatter plots.
+The highest correlations with the target variable are:
+
+- Peso-Lunghezza -> 0.80
+- Peso-Cranio -> 0.70
+- Peso-Gestazione -> 0.59
+
+From the scatter plots we can see a trend line that confirm those values.
+
+Now we will perform the modelling step.
+
+```{r}
+mod1 <- lm(Peso ~ ., data = dati)
+summary(mod1)
+
+cat("AIC:", AIC(mod1), "\n")
+cat("BIC:", BIC(mod1), "\n")
+```
+
+The first analysis on the linear model, including all the variables, is showing as expected high significance for the variables with high correlation with the target (*Lunghezza*, *Cranio*, *Gestazione*). 
+
+(The estimated coefficients for categories Ospedaleops2, Ospedaleosp3 represent the difference in the expected values compared to the reference category osp1)
+
+Explanation of the prediction model of the infant weight:
+
+- *Anni.madre* : for every year of the mother the newborn's mean weight estimation increases by 0.7983 grams.
+- *N.gravidanze* : for every previous pregnancy of the mother the newborn's mean weight estimation increases by 11.4118 grams.
+- *Gestazione* : for every pregnancy week the newborn's mean weight estimation increases by 32.5265 grams.
+- *Fumatrici* :  if the mother is a smoker the newborn's mean weight estimation decrease by 30.1567 grams.
+- *Lunghezza* : for every mm of length the newborn's mean weight estimation increases by 10.2951 grams.
+- *Cranio* : for every mm of head circumference the newborn's mean weight estimation increases by 10.4725 grams.
+- *Tipo.parto* : if is performed a natural birth the newborn's mean weight estimation increases by 29.5027 grams.
+- *Ospedaleosp2* : if the baby is born in the hospital 2 the newborn's mean weight estimation decreases by 11.2216 grams.
+- *Ospedaleosp3* : if the baby is born in the hospital 3 the newborn's mean weight estimation increases by 28.0984 grams.
+- *SessoM* : if is a boy the newborn's mean weight estimation increases by 77.5473 grams.
+
+Catch the eye some variables with p-value > 0.05, allowing us to conclude that their significance is low (if not null) for the purposes of the model goodness.
+On these basics we are going to eliminate the non-significant variables (Occam's razor).
+
+### Best model choice
+
+Performing a stepwise (mixed) procedure we will find the best model for the optimum trade off between variance explained (best R2) and simplicity (less variables included).
+
+```{r}
+n <- nrow(dati)
+mod0 <- lm(Peso ~ Lunghezza+Cranio+Gestazione, data = dati)
+stepwise_AIC <- step(mod0, scope = formula(mod1),, direction = "both", k=2, trace = F)
+stepwise_BIC <- step(mod0, scope = formula(mod1),, direction = "both", k=log(n), trace = F)
+stepwise_AIC
+stepwise_BIC
+```
+
+The results considering the 2 decision criterions applied are:
+
+- best model with AIC is estimated by *Lunghezza*, *Cranio*, *Gestazione*, *Sesso*, *N.gravidanze*, *Ospedale*, *Tipo.parto*.
+- best model with BIC is estimated by *Lunghezza*, *Cranio*, *Gestazione*, *Sesso*, *N.gravidanze*.
+Following the Occam's razor it should be chosen the simplest model, but in order to decide on a statistical basics it is performed an ANOVA
+
+```{r}
+mod.a <- update(mod1, ~. - Anni.madre - Fumatrici)
+summary(mod.a)
+mod.b <- update(mod.a, ~. - Tipo.parto - Ospedale)
+summary(mod.b)
+
+anova(mod.b, mod.a)
+```
+
+We can see in the coefficients a non significance on *Ospedaleosp2* (with p-value = 0.41), all the other coefficients are enough significant.
+
+ANOVA shows a p-value (0.001443) < 0.05 so it's possible to reject the null hypothesis, meaning that there's significant difference in the explanation of the response variable adding those independent variables.
+Although the anova suggests to consider the more complex model, there's a very little difference in R2 (and R2 adjusted) between the 2 models, so the decision is to take into account as baseline model the *mod.b*.
+
+From the scatterplots we can recognize a possible non-linear interaction between *Peso* and *Gestazione*, so we plot the data and other possible non-linear relations.
+
+```{r}
+Y=dati$Peso
+X=dati$Gestazione
+ggplot(dati, aes(x = X, y = Y)) +
+  geom_point(color = "black", alpha = 0.6) + # Punti dati
+  geom_smooth(method = "lm", formula = y ~ x, color = "blue", se = FALSE, aes(linetype = "Linear")) +  # Lineare
+  geom_smooth(method = "lm", formula = y ~ poly(x, 2), color = "red", se = FALSE, aes(linetype = "Quadratic")) + # Quadratico
+  geom_smooth(method = "lm", formula = y ~ poly(x, 3), color = "green", se = FALSE, aes(linetype = "Cubic")) + # Cubico
+  labs(title = "Comparison between different trasformations of Gestazione", 
+       x = "Gestazione", 
+       y = "Peso",
+       linetype="Line Relation") +
+  theme_minimal()
+```
+
+In order to evaluate these relations we update the models and compare each of them in an ANOVA.
+
+```{r}
+# quadratic
+mod.b_2 <- update(mod.b, ~. + I(Gestazione^2))
+summary(mod.b_2)
+anova(mod.b, mod.b_2)
+
+# cubic
+mod.b_3 <- update(mod.b, ~. + I(Gestazione^3))
+summary(mod.b_3)
+anova(mod.b, mod.b_3)
+```
+
+
+The ANOVA results are:
+
+- comparison base model-quadratic model: p-value 0.02226 < 0.05. The quadratic model has a significant improvement in variance explanation.
+- comparison base model-cubic model: p-value 0.03636 < 0.05. The cubic model has a significant improvement in variance explanation.
+
+The non-linear relation with more significance is the quadratic one (with lower pvalue) and creates less multicollinearity between *Gestazione* and the non-linear component.
+
+It's performed a comparison between the quadratic model with and without *Gestazione*.
+
+```{r}
+# only with Gestazione^2
+mod.b_2_noges <- update(mod.b_2, ~. - Gestazione)
+summary(mod.b_2_noges)
+anova(mod.b_2_noges, mod.b_2)
+```
+
+ANOVA results:
+
+- comparison quadratic model vs the same without *Gestazione*: p-value 0.1032 > 0.05. Don't reject the null hypothesis so the model with less variables is better (mod.b_2_noges).
+
+```{r}
+mod <- mod.b_2_noges
+```
+
+
+### Model qualtity
+
+The next step is to check the assumptions about the residuals (Normality, Homoscedasticity, Independence) and the Multicollinearity.
+
+```{r}
+residuals_analysis <- function(mod){
+  plot(mod)
+  bp <- bptest(mod)
+  dw <- dwtest(mod)
+  shap <- shapiro.test(residuals(mod))
+  plot(density(residuals(mod)))
+  vif <- vif(mod)
+  print(bp)
+  print(dw)
+  print(shap)
+  print(vif)
+}
+
+residuals_analysis(mod)
+```
+
+- BP test: pvalue << 0.05, we must reject the null hypothesis of homoscedasticity, so the residuals are heteroscedastic.
+- DW test: pvalue > 0.05, we can't reject the null hypothesis of no autocorrelation between residuals, so the residuals are independent.
+- SW test: pvalue << 0.05, we must reject the null hypothesis of normally distributed residuals (even if the statistic value is near to 1).
+
+The density plot and the qqplot show a normal-like curve, except for the tails. Probably due to outliers and points of leverage the normality is challenged. 
+
+There isn't multicollinearity (VIF all under 5).
+
+Observing the problem with the normality we're going to analyze possible influential points (outliers, leverage).
+
+```{r}
+cook.d <- cooks.distance(mod)
+cook.limit <- 4/n
+outliers <- outlierTest(mod)
+lev <- hatvalues(mod)
+lev.limit <- 2 * (length(coef(mod))) / n
+
+dati[which(cook.d>0.5),]
+dati[which(lev>lev.limit),]
+outliers
+```
+```{r}
+subset(dati, Lunghezza<330 & Lunghezza>300)
+```
+
+
+Usually the limit value to consider an influential point with the cook's distance is calculated as 4/n (126 points). 
+
+As we can see in the graph of residuals exist only an extreme point with a very high value of cook's distance (>0.5) and is the record 1551. That newborn compared with others of similar length shows a huge weight, so we can conclude that this probably was an error of data entry.
+
+The leverage points that are greater the usual limit of 2k/n are 153. None of the leverage points seem to have errors.
+Outliers are only 3.
+
+In order to evaluate the distortion given from the extreme point (that is a leverage point and an outlier too) we'll perform the model without that point and analyze the residuals.
+
+
+```{r}
+mod.no.extreme <- update(mod, data = dati[-which(cook.d > 0.5), ])
+summary(mod.no.extreme)
+residuals_analysis(mod.no.extreme)
+```
+
+In this case all the tests are better compared to the base model:
+
+- there is homoscedasticity (BP test with pvalue 0.07435>0.05);
+- there is independence (DW test with pvalue 0.1219>0.05);
+- even if the shapiro test reject the normality, the pvalue is greater than the one on the base model (confirming the statement done before about the influence of the leverage points on the normality);
+- from vif analysis there isn't multicollinearity.
+
+It's made the last check on models quality comparing R2, R2 adjusted and RMSE.
+
+```{r}
+rmse <- function(mod, data= NULL){
+  pred <- predict(mod, newdata = data)
+  rmse <- sqrt(mean((data$Peso - pred)^2))
+  return(rmse)
+}
+cat("Base model:    RMSE= ", rmse(mod, dati), "   R2= ", summary(mod)$r.squared," R2 adj= ", summary(mod)$adj.r.squared, "\n")
+cat("No extr. model:  RMSE= ", rmse(mod.no.extreme, dati[-which(cook.d > 0.5), ]), "   R2= ", summary(mod.no.extreme)$r.squared, " R2 adj= ", summary(mod.no.extreme)$adj.r.squared)
+```
+
+The indicators of goodness between base model and the no extreme one put us in the position to make a clear choice.
+The model without the extreme point is better in all the indicators.
+
+The 73.7% of the target variable variance is explained by the model selected.
+
+```{r}
+mod <- mod.no.extreme
+dati.mod <- dati[-which(cook.d > 0.5), ]
+```
+
+
+## 3. Predictions and Results
+
+We are going to use the model to estimate the weight of a female newborn considering that the mother is at her third pregnancy and will give birth at the 39th week.
+
+To perform the prediction we have to take some assumptions for the missing data of the case:
+
+- *Lunghezza*, *Cranio*: are taken the mean of the data.
+
+```{r}
+newdata <- data.frame(N.gravidanze=2, Gestazione=39, Lunghezza=mean(dati.mod$Lunghezza), Cranio=mean(dati.mod$Cranio), Sesso=factor("F"))
+  
+pred <- predict(mod, newdata = newdata, interval = "confidence", level = 0.95)
+pred
+```
+
+The estimation of the baby girl mean weight is 3257 grams and with the 95% of possibility will be between 3240 and 3275 grams.
+
+Obviously with all the data about length, head circumference the prediction could be more detailed and restricted in the values range.
+
+
+## 4. Visualizations
+
+Are shown below the relations between target variable (*Peso*) and the independent variables (*Lunghezza*, *Cranio*, *Gestazione*) and is plotted the regression line about the model.
+For the body measurements is highlighted the sex division.  
+
+```{r}
+attach(dati.mod)
+ylab <- as.character("Weight of the newborn (g)")
+col_scale <- scale_color_manual(values = c("M" = "blue", "F" = "red"))
+
+p1 <- ggplot()+
+    geom_point(aes(x = Gestazione, y = Peso, col = Sesso), alpha = 0.5, position = "jitter")+
+    geom_smooth(aes(x = Gestazione[Sesso == "M"], y = Peso[Sesso == "M"]),
+                col = "black", lwd = 1.5, method = "lm", formula = y ~ x + I(x^2), se = F)+
+    geom_smooth(aes(x = Gestazione[Sesso == "F"], y = Peso[Sesso == "F"]),
+                col = "black", lwd = 1.5, method = "lm", formula = y ~ x + I(x^2), se = F)+
+    geom_smooth(aes(x = Gestazione, y = Peso, col = Sesso),
+                method = "lm", formula = y ~ x + I(x^3), se = F)+
+    col_scale +
+    labs(x = "Week of pregnancy",
+         y = ylab)+
+    theme_bw()+
+    theme(legend.position = "none")
+
+
+p2 <- ggplot()+
+    geom_boxplot(aes(x = as.factor(N.gravidanze), y = Peso))+
+    geom_smooth(aes(x = 1+N.gravidanze, y = Peso),
+                lwd = 1.25, method = "lm", se = F)+
+    labs(x = "N° of previous pregnancies",
+         y = ylab)+
+    theme_bw()
+
+
+p3 <- ggplot()+
+    geom_point(aes(x = Lunghezza, y = Peso, col = Sesso), alpha = 0.25, position = "jitter")+
+    geom_smooth(aes(x = Lunghezza[Sesso == "M"], y = Peso[Sesso == "M"]),
+                col = 1, lwd = 1.5, method = "lm", se = F)+
+    geom_smooth(aes(x = Lunghezza[Sesso == "F"], y = Peso[Sesso == "F"]),
+                col = 1, lwd = 1.5, method = "lm", se = F)+
+    geom_smooth(aes(x = Lunghezza, y = Peso, col = Sesso), method = "lm", se = F)+
+    col_scale+
+    scale_x_continuous(breaks = seq(300, 550, 50))+
+    scale_y_continuous(breaks = seq(1000, 5000, 500))+
+    labs(x = "Length of the newborn (mm)",
+         y = ylab)+
+    theme_bw()+
+    theme(legend.position = "none")
+
+
+p4 <- ggplot()+
+    geom_point(aes(x = Cranio, y = Peso, col = Sesso), alpha = 0.4, position = "jitter")+
+    geom_smooth(aes(x = Cranio[Sesso == "M"], y = Peso[Sesso == "M"]),
+                col = 1, lwd = 1.5, method = "lm", se = F)+
+    geom_smooth(aes(x = Cranio[Sesso == "F"], y = Peso[Sesso == "F"]),
+                col = 1, lwd = 1.5, method = "lm", se = F)+
+    geom_smooth(aes(x = Cranio, y = Peso, col = Sesso), method = "lm", se = F)+
+    col_scale+
+    scale_x_continuous(breaks = seq(260, 380, 40))+
+    scale_y_continuous(breaks = seq(1000, 5000, 500))+
+    labs(x = "Head circumference of the newborn (mm)",
+         y = ylab)+
+    theme_bw()+
+    theme(legend.position = "none")
+
+p1
+p2
+p3
+p4
+```
+
+## Conclusions
+
+The model has a good prediction value (R2=73,7%) but it needs to be perfected in order to give to the health system operators a reliable tool.
+
+Obviously the amount of data has to be increased to be able to find other patterns and discover if are significant those that were excluded in this case.
+
+More complex is a model, higher are the chance to describe in the best way the real word; so it's possible that the Linear Regression couldn't be the best solution to predict the newborns weight.
+
