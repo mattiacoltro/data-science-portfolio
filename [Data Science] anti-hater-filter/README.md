@@ -13,7 +13,6 @@ In recent years, online content moderation has become a critical challenge for m
 
 The company **TechTalk**, a forum for technology enthusiasts, has found that a significant number of comments posted in community threads contain hate speech and insults that compromise the quality of discussions. Users have reported that, due to its growing popularity, the platform struggles to manage the flow of harmful comments using traditional moderation tools. **TechTalk** has turned to **DeepCortex AI Solutions** to implement an automated moderation solution based on Deep Learning that can filter toxic comments in real-time.
 **DeepCortex AI Solutions** has decided to develop an advanced system based on Deep Learning technologies to automate and improve the moderation process. At the heart of the project is a deep learning model featuring **recurrent layers**, designed to classify comments into multiple toxicity categories.
-The **DeepCortex AI Solutions** project will provide an advanced, automated solution for toxic content moderation, significantly improving the quality of online discussions on TechTalk. The system will ensure more efficient and accurate comment management, offering a safe and inclusive platform for all users.
 
 ### Use Case
 
