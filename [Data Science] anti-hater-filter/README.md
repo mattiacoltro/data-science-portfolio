@@ -6,8 +6,9 @@ In recent years, online content moderation has become a critical challenge for m
 - Python
 - Pandas, Numpy, Matplotlib
 - Tensowflow, Keras
-- Machine Learning
-- RNN: LSTM, GRU
+- Machine Learning: Multi label classification
+- NLP
+- Deep Learning: RNN (LSTM, GRU)
 
 ## The Problem to Solve
 
