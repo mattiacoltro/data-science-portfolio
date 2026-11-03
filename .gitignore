@@ -14,7 +14,12 @@ dataset_procam/
 downloads/
 embeddings/
 
-# anti-hater-filter: curve degli esperimenti intermedi (tengo solo quella del modello finale)
+# anti-hater-filter: 
+    # curve degli esperimenti intermedi (tengo solo quella del modello finale)
 *_learning_curves*.png
 *_pr_curves*.png
 !model_10_BiGRU_Reg_learning_curves.png
+
+    # modelli trainati: tengo solo i pesi del modello finale
+**/models/*.h5
+!**/models/model_10_BiGRU_Reg_weights.h5
