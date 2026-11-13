@@ -9,3 +9,6 @@ xgboost==3.0.1
 lightgbm==4.6.0
 shap==0.47.2
 ipykernel==6.29.5
+optbinning==1.0.0
+ortools==9.15.6755
+ropwr==1.2.0
