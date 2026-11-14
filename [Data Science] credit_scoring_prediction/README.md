@@ -4,6 +4,26 @@ Binary classification of credit card applicants (`TARGET`: 1 = reliable, 0 = unr
 on 338,426 applicants, with interpretable explanations of the predictions.
 The original assignment is kept at the bottom of this page.
 
+## Version 2: risk-oriented scorecard
+
+`credit_scoring_v2.ipynb` reworks the analysis with credit-risk practice; v1 and its results below are unchanged.
+
+**What was done**
+- Train/validation/test split (60/20/20) with imputation fitted on train only; the test set is used once.
+- Sanity checks of the features against the target, and a WoE/IV scorecard built with `optbinning` (`CODE_GENDER` excluded as a protected attribute).
+- Pensioners (0 reliable applicants out of ~34,700 in train) and three threshold rules (income < ~158k, age < ~41 years, employment < ~4 years) handled as exclusion rules: they remove 82% of applicants and lose 0.9% of the reliable ones.
+- Gini and KS as main metrics, and an acceptance cut-off chosen on validation with a declared cost assumption.
+
+**Results** (scorecard B, applicants left after the exclusion rules)
+- Test set (10,342 applicants): **Gini 0.404, KS 0.356, AUC 0.702**.
+- On validation it matches LightGBM trained on the same population (Gini 0.409 vs 0.407) and beats a logistic regression on raw variables (0.251).
+- Cut-off of 829.4 points: 61.6% approved, 30.6% of them unreliable. Under the assumed economics (gain 100, loss 200), profit per applicant is +4.97 versus −29.26 when approving everyone.
+
+**Limitations**
+- The dataset is likely synthetic: the label is almost a threshold rule on income, age and employment length. Gini ≈ 0.95 without the exclusion rules is not representative of a real portfolio, and in the remaining population the signal comes essentially from income and age.
+- Exclusion thresholds come from the training labels, not from a real credit policy.
+- The cost figures are assumptions and the profit margin is thin; no PD calibration or IFRS 9 link is attempted, and no fairness analysis is done (age is a feature).
+
 ## Tech stack
 
 - **Language**: Python
@@ -89,10 +109,14 @@ The full run is slow (the logged model fits add up to about 53 minutes).
 ## Limitations
 
 - **The dataset is likely synthetic or heavily preprocessed.** Several signals point
-  in that direction: (i) very high discrimination (ROC-AUC 0.98 for the final model)
-  despite weak pairwise correlations between features and target; (ii) no duplicate
-  profiles among the 338,426 applicants; (iii) a clean dataset with a single
-  incomplete record; (iv) a class definition that is the reverse of real credit
+  in that direction: 
+  - (i) very high discrimination (ROC-AUC 0.98 for the final model)
+  despite weak pairwise correlations between features and target; 
+  - (ii) no duplicate
+  profiles among the 338,426 applicants; 
+  - (iii) a clean dataset with a single
+  incomplete record; 
+  - (iv) a class definition that is the reverse of real credit
   portfolios: here the reliable applicants (`TARGET = 1`) are only 8.8% of the data,
   while in real credit data defaults are the rare class.
 - **Single hold-out test set used also for model selection.** Models, resampling
